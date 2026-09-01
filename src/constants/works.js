@@ -1,0 +1,53 @@
+import { ASSETS } from './assets'
+
+// 作品数据 - cover 引用 ASSETS.works，不硬编码 URL
+export const WORKS = [
+  {
+    id: 'brand',
+    number: '01',
+    title: '品牌视觉练习',
+    titleEn: 'BRAND IDENTITY',
+    tags: ['品牌', 'VI练习', 'Logo'],
+    shortDesc: '为虚构品牌做的视觉识别练习，从 Logo 到简单应用场景的尝试。',
+    fullDesc: '这是一个自学过程中的品牌视觉练习项目。为一个虚构的科技品牌设计了 Logo、色彩方案和简单的应用场景。核心思路是用极简几何图形构建记忆点，在暗色基调中用橙色作为视觉锚点。通过这个练习，我对品牌系统的一致性有了更具体的理解，但还有很多不成熟的地方，后续会继续迭代。',
+    tools: ['Figma', 'Illustrator', 'Photoshop'],
+    cover: ASSETS.works.brand,
+    video: null,
+  },
+  {
+    id: 'ai',
+    number: '02',
+    title: 'AI 视觉探索',
+    titleEn: 'AI VISION LAB',
+    tags: ['AI生成', '提示词', '视觉实验'],
+    shortDesc: '用 AI 工具做的一系列视觉实验，探索提示词与画面风格的关系。',
+    fullDesc: '这是我在学习 AI 图像生成过程中做的一系列实验。从最开始随便输入提示词，到慢慢学会控制风格、构图和色彩，这个过程让我对"AI 能做什么、不能做什么"有了更实在的理解。实验成果涵盖抽象视觉和概念方向，更多是探索性质，还没有形成完整的方法论。',
+    tools: ['Midjourney', 'Stable Diffusion', 'Photoshop'],
+    cover: ASSETS.works.ai,
+    video: null,
+  },
+  {
+    id: 'speech',
+    number: '03',
+    title: '演讲 PPT 设计',
+    titleEn: 'SPEECH DECK',
+    tags: ['排版', '演讲', 'PPT'],
+    shortDesc: '校内英语演讲的 PPT 设计，从撰稿到视觉呈现独立完成。',
+    fullDesc: '校内英语演讲比赛的配套 PPT，从撰稿、内容架构到视觉设计都是自己完成的。采用了大字号、少文字的演讲型排版原则，配合简单的图表和视觉隐喻。做这个项目的时候深刻体会到，PPT 不是把稿子贴上去，而是要帮观众更快理解你在说什么。现场反馈还不错，但回头看还有很多可以改进的地方。',
+    tools: ['PowerPoint', 'Keynote', 'Photoshop'],
+    cover: ASSETS.works.speech,
+    video: ASSETS.speechVideo,
+  },
+  {
+    id: 'concept',
+    number: '04',
+    title: '通信×设计概念',
+    titleEn: 'CONVERGENCE',
+    tags: ['跨学科', '概念', '思考'],
+    shortDesc: '尝试用通信工程的概念类比设计方法，还很初步的想法整理。',
+    fullDesc: '这是一个概念性的小项目，起源于我在学习通信工程基础时产生的一些联想——比如信号滤波和视觉降噪、编码理论和符号设计之间似乎有共通的逻辑。我把这些初步的想法整理成了一组视觉概念图。这个项目更多是思考的记录，不是成熟的设计作品，但它代表了我对跨学科方向的兴趣和探索。',
+    tools: ['Figma', 'Illustrator'],
+    cover: ASSETS.works.concept,
+    video: null,
+  },
+]

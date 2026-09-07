@@ -50,4 +50,18 @@ export const WORKS = [
     cover: ASSETS.works.concept,
     video: null,
   },
+  {
+    id: 'game',
+    number: '05',
+    title: '霓虹坦克游戏',
+    titleEn: 'NEON TANKS',
+    tags: ['游戏', 'Canvas', '独立开发'],
+    shortDesc: '用原生 JavaScript + Canvas 开发的霓虹风格坦克射击游戏，含 Boss 战和背景音乐。',
+    fullDesc: '一款独立开发的 HTML5 Canvas 坦克射击游戏，采用霓虹赛博朋克视觉风格。游戏包含多波次敌人、三种 Boss 战、升级系统和背景音乐，全部代码手写在单个 HTML 文件中。点击卡片在新标签页开始游戏。',
+    tools: ['JavaScript', 'Canvas', 'HTML5'],
+    cover: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200&q=80',
+    video: null,
+    isGame: true,
+    gameUrl: './game/',
+  },
 ]

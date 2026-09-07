@@ -2,17 +2,17 @@
 // 视频已上传至可靠 CDN，无防盗链
 export const ASSETS = {
   // Hero 背景视频（3D线框球体+拼贴画）
-  heroVideo: 'https://aka.doubaocdn.com/s/AecZ6maXgb',
+  heroVideo: './videos/hero-bg.mp4',
   // 后续模块背景视频（紫粉玻璃球+星光）
-  sectionVideo: 'https://aka.doubaocdn.com/s/16OHTo5XjV',
+  sectionVideo: './videos/section-bg.mp4',
   // 人物大图 + 头像（同一张大头照）
-  portrait: 'https://aka.doubaocdn.com/s/ODU2SSBoaU',
-  avatar: 'https://aka.doubaocdn.com/s/ODU2SSBoaU',
+  portrait: './images/portrait.jpg',
+  avatar: './images/portrait.jpg',
   // 证书
-  certificate1: 'https://aka.doubaocdn.com/s/aN8XVfGNvp',
-  certificate2: 'https://aka.doubaocdn.com/s/KR7xL0vUrJ',
+  certificate1: './images/cert1.jpg',
+  certificate2: './images/cert2.jpg',
   // 演讲视频
-  speechVideo: 'https://aka.doubaocdn.com/s/aLyPrTwfWo',
+  speechVideo: './videos/speech.mp4',
   // 作品封面图（unsplash 深色设计感图片）
   works: {
     brand: 'https://images.unsplash.com/photo-1558655146-d09347e92766?w=1200&q=80',

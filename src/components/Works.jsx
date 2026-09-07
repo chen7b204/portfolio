@@ -1,9 +1,18 @@
 import { WORKS } from '../constants/works'
 
 export default function Works({ onWorkClick }) {
-  // 分两行：第一行大+小，第二行小+大（错位）
+  // 分三行：前两行大+小错位，第三行游戏独占
   const row1 = [WORKS[0], WORKS[1]]
   const row2 = [WORKS[2], WORKS[3]]
+  const game = WORKS[4]
+
+  const handleCardClick = (work) => {
+    if (work.isGame) {
+      window.open(work.gameUrl, '_blank')
+    } else {
+      onWorkClick(work)
+    }
+  }
 
   return (
     <section id="works" className="section">
@@ -19,7 +28,7 @@ export default function Works({ onWorkClick }) {
               <div
                 key={work.id}
                 className={`work-card reveal ${i === 0 ? 'large' : 'small'}`}
-                onClick={() => onWorkClick(work)}
+                onClick={() => handleCardClick(work)}
               >
                 <div className="work-cover">
                   <img src={work.cover} alt={work.title} loading="lazy" />
@@ -44,7 +53,7 @@ export default function Works({ onWorkClick }) {
               <div
                 key={work.id}
                 className={`work-card reveal ${i === 0 ? 'small' : 'large'}`}
-                onClick={() => onWorkClick(work)}
+                onClick={() => handleCardClick(work)}
               >
                 <div className="work-cover">
                   <img src={work.cover} alt={work.title} loading="lazy" />
@@ -62,6 +71,30 @@ export default function Works({ onWorkClick }) {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* 游戏卡片 - 独占一行 */}
+          <div className="works-row">
+            <div
+              className="work-card reveal game-card"
+              onClick={() => handleCardClick(game)}
+            >
+              <div className="work-cover">
+                <img src={game.cover} alt={game.title} loading="lazy" />
+                <div className="work-cover-overlay" />
+                <div className="game-play-badge">▶ 点击开始游戏</div>
+              </div>
+              <div className="work-info">
+                <div className="work-num">{game.number} / {game.titleEn}</div>
+                <h3 className="work-title">{game.title}</h3>
+                <div className="work-tags">
+                  {game.tags.map((tag) => (
+                    <span key={tag} className="work-tag">#{tag}</span>
+                  ))}
+                </div>
+                <p className="work-desc">{game.shortDesc}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>

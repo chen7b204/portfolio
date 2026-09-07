@@ -60,16 +60,18 @@ export default function About({ onImageClick }) {
         </div>
 
         <div className="about-grid">
-          {/* 人物图 */}
-          <div className="about-image-wrap reveal">
-            <img src={ASSETS.portrait} alt={PROFILE.name} loading="lazy" />
-            <div className="about-image-overlay" />
-          </div>
-
           {/* 文字内容 */}
           <div className="about-text reveal">
-            <h3>{PROFILE.name}</h3>
-            <p className="about-role">{PROFILE.school} · {PROFILE.major}在读</p>
+            {/* 头像 + 名字 */}
+            <div className="about-header">
+              <div className="about-avatar">
+                <img src={ASSETS.portrait} alt={PROFILE.name} loading="lazy" />
+              </div>
+              <div className="about-header-text">
+                <h3>{PROFILE.name}</h3>
+                <p className="about-role">{PROFILE.school} · {PROFILE.major}在读</p>
+              </div>
+            </div>
             <p className="about-bio">{PROFILE.bio}</p>
 
             {/* 扩展简介段落 */}

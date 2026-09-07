@@ -24,6 +24,11 @@ export default function Navbar({ activeId }) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
 
+  const handleGameClick = () => {
+    setMenuOpen(false)
+    window.open('./game/', '_blank')
+  }
+
   return (
     <>
       <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
@@ -42,6 +47,11 @@ export default function Navbar({ activeId }) {
               </a>
             </li>
           ))}
+          <li>
+            <a href="#" className="navbar-game" onClick={(e) => { e.preventDefault(); handleGameClick() }}>
+              🎮 小游戏
+            </a>
+          </li>
         </ul>
         <a
           href="#contact"
@@ -71,6 +81,9 @@ export default function Navbar({ activeId }) {
             {item.label}
           </a>
         ))}
+        <a href="#" onClick={(e) => { e.preventDefault(); handleGameClick() }}>
+          🎮 小游戏
+        </a>
       </div>
     </>
   )

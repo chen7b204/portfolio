@@ -475,27 +475,34 @@ video { display: block; }
 /* ========== About ========== */
 .about-grid {
   display: grid;
-  grid-template-columns: 45% 50%;
-  gap: 5%;
-  align-items: start;
+  grid-template-columns: 1fr;
+  gap: 0;
   margin-bottom: 80px;
 }
-.about-image-wrap {
-  position: relative;
-  aspect-ratio: 4/5;
-  overflow: hidden;
-  border: 1px solid var(--border);
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
 }
-.about-image-wrap img {
+.about-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--border-accent);
+  flex-shrink: 0;
+  box-shadow: 0 0 20px rgba(255,122,26,0.15);
+}
+.about-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.about-image-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,122,26,0.05), rgba(30,20,60,0.15));
-  pointer-events: none;
+.about-header-text h3 {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  margin-bottom: 4px;
 }
 .about-text h3 {
   font-family: var(--font-serif);
@@ -793,6 +800,29 @@ video { display: block; }
 }
 .work-card.large { flex: 0 0 58%; }
 .work-card.small { flex: 0 0 38%; }
+.work-card.game-card { flex: 0 0 100%; }
+.work-card.game-card .work-cover { aspect-ratio: 21/9; }
+.game-play-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px 32px;
+  background: rgba(255,122,26,0.9);
+  color: #fff;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  border-radius: 4px;
+  z-index: 2;
+  transition: all 0.3s;
+  pointer-events: none;
+}
+.work-card:hover .game-play-badge {
+  background: var(--accent);
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow: 0 0 30px rgba(255,122,26,0.5);
+}
 .work-card:hover {
   border-color: var(--border-accent);
   transform: translateY(-4px);

@@ -9,13 +9,40 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;touch-action:none;-webkit-user-select:none;user-select:none;}
 body{display:flex;justify-content:center;align-items:center;font-family:sans-serif;background:radial-gradient(ellipse at center,#0d1a0d 0%,#050d05 70%,#000 100%);}
-#game-wrap{position:relative;width:min(100vh*9/16,100vw);height:min(100vh,100vw*16/9);aspect-ratio:9/16;max-width:720px;max-height:1280px;background:#050d05;border:2px solid var(--neon-cyan);border-radius:4px;box-shadow:0 0 30px rgba(0,240,255,0.3);overflow:hidden;}
+#game-wrap{position:relative;width:min(100vw,177.78vh);height:min(56.25vw,100vh);aspect-ratio:16/9;max-width:1280px;max-height:720px;background:#050d05;border:2px solid var(--neon-cyan);border-radius:4px;box-shadow:0 0 30px rgba(0,240,255,0.3);overflow:hidden;}
 #game{width:100%;height:100%;display:block;background:#0a140a;}
+#rotate-hint{display:none;position:fixed;inset:0;z-index:99;background:radial-gradient(ellipse at center,#0d1a0d 0%,#050d05 70%,#000 100%);flex-direction:column;align-items:center;justify-content:center;gap:30px;color:#00f0ff;text-align:center;touch-action:none;}
+#rotate-hint .phone-icon{font-size:90px;animation:rotphone 1.8s ease-in-out infinite;filter:drop-shadow(0 0 15px rgba(0,240,255,0.6));}
+#rotate-hint h2{font-size:32px;font-weight:bold;text-shadow:0 0 20px rgba(0,240,255,0.8);}
+#rotate-hint p{font-size:18px;color:#8fbc8f;line-height:1.8;}
+@keyframes rotphone{0%,20%{transform:rotate(0deg);}60%,100%{transform:rotate(90deg);}}
+/* 手机横握：横版游戏铺满整块屏幕 */
+body.force-landscape.orient-landscape #game-wrap{
+  position:fixed;left:0;top:0;
+  width:100vw;height:100vh;
+  border:none;border-radius:0;box-shadow:none;
+  max-width:none;max-height:none;aspect-ratio:auto;
+}
+/* 手机竖握（系统未旋转）：把横版游戏旋转90度铺满竖屏 */
+body.force-landscape.orient-portrait #game-wrap{
+  position:fixed;left:0;top:0;margin:0;
+  width:100vh;height:100vw;
+  transform:rotate(90deg) translateY(-100%);
+  transform-origin:0 0;
+  border:none;border-radius:0;box-shadow:none;background:#050d05;
+  max-width:none;max-height:none;aspect-ratio:auto;
+}
+body.force-landscape{background:#000;overflow:hidden;}
 </style>
 </head>
 <body>
 <div id="game-wrap">
-  <canvas id="game" width="720" height="1280"></canvas>
+  <canvas id="game" width="1280" height="720"></canvas>
+</div>
+<div id="rotate-hint">
+  <div class="phone-icon">📱</div>
+  <h2>请横屏游玩</h2>
+  <p>请将手机旋转90度<br>横握手机以获得最佳体验</p>
 </div>
 <script>
 (function(){
@@ -23,7 +50,7 @@ body{display:flex;justify-content:center;align-items:center;font-family:sans-ser
 const canvas=document.getElementById('game');
 const ctx=canvas.getContext('2d');
 ctx.imageSmoothingEnabled=false;
-const W=720,H=1280;
+const W=1280,H=720;
 const C={cyan:'#00f0ff',magenta:'#ff00d4',yellow:'#ffe600',red:'#ff2a4d',green:'#00ff9c',white:'#e0f7ff'};
 
 const assets={};
@@ -40,6 +67,10 @@ loadImg('enemy','assets/sprites/enemy.png');
 loadImg('boss1','assets/sprites/boss_1.png');
 loadImg('boss2','assets/sprites/boss_2.png');
 loadImg('boss3','assets/sprites/boss_3.png');
+loadImg('skin0','assets/sprites/skin_0.png');
+loadImg('skin1','assets/sprites/skin_1.png');
+loadImg('skin2','assets/sprites/skin_2.png');
+loadImg('skin3','assets/sprites/skin_3.png');
 
 const bgm=new Audio('assets/audio/bgm.mp3');
 bgm.loop=true;
@@ -59,32 +90,126 @@ function pauseBGM(){bgm.pause();}
 function resumeBGM(){if(bgmStarted)bgm.play().catch(()=>{});}
 
 let state='loading',score=0,gameTime=0,lastTime=0;
-let level=1,kills=0,bossSpawned=false;
+let level=1,kills=0,bossSpawned=false,bossBanner=0;
+// 技能卡系统：4个技能，购买后本关生效
+const skillDefs=[
+  {id:'bigBullet',name:'巨型炮弹',desc:'随机发射大号高伤子弹',cost:500},
+  {id:'allyTank', name:'友军支援',desc:'每击败3辆敌人召唤友方坦克',cost:800},
+  {id:'newEnemyShield',name:'先手护盾',desc:'新敌人出现时无敌3秒',cost:600},
+  {id:'bulletStorm',name:'弹幕风暴',desc:'随机向四周发射一群子弹',cost:700}
+];
+let skills={bigBullet:false,allyTank:false,newEnemyShield:false,bulletStorm:false};
+let skillTimers={bigBullet:0,bulletStorm:0};
+let killCountForAlly=0;
+let allies=[]; // 友方坦克
 const keys={};
 
 window.addEventListener('keydown',e=>{
   keys[e.key.toLowerCase()]=true;
   if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))e.preventDefault();
-  if(state==='menu'&&(e.key==='Enter'||e.key===' '))startGame();
-  if(state==='levelclear'&&(e.key==='Enter'||e.key===' '))nextLevel();
-  if(state==='gameover'&&(e.key==='Enter'||e.key===' '))startGame();
-  if(state==='victory'&&(e.key==='Enter'||e.key===' '))startGame();
-  if(state==='playing'&&e.key.toLowerCase()==='p'){state='paused';pauseBGM();}
+  if(state==='menu'){
+    const k=e.key.toLowerCase();
+    if(menuPage===0){
+      // 第1页：战机选择
+      if(k==='arrowleft'||k==='a')selectedShip=(selectedShip+2)%3;
+      if(k==='arrowright'||k==='d')selectedShip=(selectedShip+1)%3;
+      if(k==='enter'||k===' ')menuPage=1;
+    }else if(menuPage===1){
+      // 第2页：皮肤选择
+      if(k==='arrowleft'||k==='a'||k==='q')selectedSkin=(selectedSkin+skins.length-1)%skins.length;
+      if(k==='arrowright'||k==='d'||k==='e')selectedSkin=(selectedSkin+1)%skins.length;
+      if(k==='enter'||k===' ')menuPage=2;
+      if(k==='escape'||k==='backspace')menuPage=0;
+    }else{
+      // 第3页：难度选择
+      if(k==='1'||k==='arrowleft'||k==='a')difficulty='easy';
+      if(k==='2'||k==='arrowright'||k==='d')difficulty='hard';
+      if(k==='enter'||k===' ')startGame();
+      if(k==='escape'||k==='backspace')menuPage=1;
+    }
+  }
+  else if(state==='levelclear'&&(e.key==='Enter'||e.key===' '))nextLevel();
+  else if(state==='gameover'&&(e.key==='Enter'||e.key===' '))startGame();
+  else if(state==='victory'&&(e.key==='Enter'||e.key===' '))startGame();
+  else if(state==='skillselect'){
+    const kn=e.key;
+    if(kn==='1')buySkill(0);
+    if(kn==='2')buySkill(1);
+    if(kn==='3')buySkill(2);
+    if(kn==='4')buySkill(3);
+    if(e.key==='Enter'||e.key===' '){state='playing';resumeBGM();}
+  }
+  else if(state==='playing'&&e.key.toLowerCase()==='p'){state='paused';pauseBGM();}
   else if(state==='paused'&&e.key.toLowerCase()==='p'){state='playing';resumeBGM();}
 });
 window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 
 // Touch controls (mobile)
 const isTouch=('ontouchstart' in window)||navigator.maxTouchPoints>0;
+function updateOrientation(){
+  document.body.classList.remove('force-landscape','orient-landscape','orient-portrait');
+  if(!isTouch)return;
+  document.body.classList.add('force-landscape');
+  document.body.classList.add(window.innerWidth>window.innerHeight?'orient-landscape':'orient-portrait');
+}
+window.addEventListener('resize',updateOrientation);
+window.addEventListener('orientationchange',function(){setTimeout(updateOrientation,150);});
+updateOrientation();
+const isRotated=()=>document.body.classList.contains('force-landscape')&&document.body.classList.contains('orient-portrait');
 const joy={active:false,id:null,ox:0,oy:0,dx:0,dy:0};
 let fireTouchId=null,touchFiring=false;
-function toCanvas(t){const r=canvas.getBoundingClientRect();return{x:(t.clientX-r.left)*(W/r.width),y:(t.clientY-r.top)*(H/r.height)};}
+function toCanvas(t){
+  if(isRotated()){
+    // 容器被CSS旋转90度后，getBoundingClientRect返回旋转后的实际包围盒
+    const r=canvas.getBoundingClientRect();
+    const cx=r.left+r.width/2, cy=r.top+r.height/2;
+    // 屏幕水平方向↔游戏Y轴，屏幕垂直方向↔游戏X轴
+    return{x:W/2+(t.clientY-cy)*W/r.height, y:H/2-(t.clientX-cx)*H/r.width};
+  }
+  const r=canvas.getBoundingClientRect();return{x:(t.clientX-r.left)*(W/r.width),y:(t.clientY-r.top)*(H/r.height)};
+}
 canvas.addEventListener('touchstart',e=>{
   e.preventDefault();
   for(const t of e.changedTouches){
     const p=toCanvas(t);
-    if(state==='menu'||state==='gameover'||state==='victory'){startGame();return;}
+    if(state==='menu'){
+      if(menuPage===0){
+        // 第1页：战机卡片 + NEXT
+        const cardXs=[300,640,980];
+        let chosen=-1;
+        for(let k=0;k<3;k++){if(p.x>cardXs[k]-145&&p.x<cardXs[k]+145&&p.y>165&&p.y<545)chosen=k;}
+        if(chosen>=0){if(selectedShip===chosen)menuPage=1;else selectedShip=chosen;}
+        else if(p.x>500&&p.x<780&&p.y>588&&p.y<652)menuPage=1;
+        return;
+      }
+      if(menuPage===1){
+        // 第2页：皮肤卡片 + BACK/NEXT
+        const n=skins.length,gap=190,cx0=640-(n-1)*gap/2;
+        for(let i=0;i<n;i++){
+          if(Math.abs(p.x-(cx0+i*gap))<78&&Math.abs(p.y-350)<105){selectedSkin=i;break;}
+        }
+        if(p.x>240&&p.x<480&&p.y>588&&p.y<652)menuPage=0;
+        else if(p.x>800&&p.x<1040&&p.y>588&&p.y<652)menuPage=2;
+        return;
+      }
+      // 第3页：难度 + START/BACK
+      if(p.x>320&&p.x<620&&p.y>190&&p.y<430)difficulty='easy';
+      else if(p.x>660&&p.x<960&&p.y>190&&p.y<430)difficulty='hard';
+      else if(p.x>490&&p.x<790&&p.y>475&&p.y<545)startGame();
+      else if(p.x>110&&p.x<290&&p.y>483&&p.y<537)menuPage=1;
+      return;
+    }
+    if(state==='gameover'||state==='victory'){startGame();return;}
     if(state==='levelclear'){nextLevel();return;}
+    if(state==='skillselect'){
+      // 技能卡购买（4张大卡片）
+      const xs=[140,400,660,920];
+      for(let i=0;i<4;i++){
+        if(p.x>xs[i]&&p.x<xs[i]+220&&p.y>180&&p.y<460){buySkill(i);break;}
+      }
+      if(p.x>490&&p.x<790&&p.y>525&&p.y<595){state='playing';resumeBGM();}
+      return;
+    }
     if(p.x>W-70&&p.y<70){
       if(state==='playing'){state='paused';pauseBGM();}
       else if(state==='paused'){state='playing';resumeBGM();}
@@ -117,27 +242,46 @@ function endTouch(e){
 canvas.addEventListener('touchend',endTouch,{passive:false});
 canvas.addEventListener('touchcancel',endTouch,{passive:false});
 
-const player={x:W/2,y:H-120,w:52,h:52,speed:3.5,angle:-Math.PI/2,hp:4,maxHp:4,fireCooldown:0,invincible:0,power:1};
+const player={x:W/2,y:H-130,w:64,h:64,speed:5,angle:-Math.PI/2,hp:4,maxHp:4,fireCooldown:0,invincible:0,power:1,color:C.cyan,fireRate:0.35};
+// 可选战机：轻型(高速脆皮)、中型(均衡)、重型(厚甲双炮)
+const ships=[
+  {name:'LIGHT',label:'轻型侦察',color:C.cyan,speed:6.5,hp:2,fireRate:0.25,startPower:1},
+  {name:'MEDIUM',label:'中型主战',color:C.green,speed:5,hp:4,fireRate:0.35,startPower:1},
+  {name:'HEAVY',label:'重型炮车',color:C.yellow,speed:3.6,hp:6,fireRate:0.5,startPower:2}
+];
+let selectedShip=1;
+let selectedSkin=0;
+let menuPage=0; // 0=战机选择 1=皮肤选择 2=难度选择（分3页）
+// 5款角色皮肤：熊大(默认player图)、熊二、吉吉、毛毛、蹦蹦
+const skins=[
+  {name:'熊大',img:assets.player,color:C.cyan},
+  {name:'熊二',img:assets.skin0,color:C.yellow},
+  {name:'吉吉',img:assets.skin1,color:C.green},
+  {name:'毛毛',img:assets.skin2,color:C.magenta},
+  {name:'蹦蹦',img:assets.skin3,color:'#ff8c42'}
+];
+let difficulty='easy'; // easy=简单(Boss无第二形态) hard=困难(Boss双形态)
 let bullets=[],enemies=[],enemyBullets=[],particles=[],items=[],walls=[];
 let stars=[];
 for(let i=0;i<80;i++){stars.push({x:Math.random()*W,y:Math.random()*H,speed:0.3+Math.random()*1.5,size:Math.random()*2+0.5});}
 
 const levels=[
-  {name:'LEVEL 1',enemyHp:2,enemySpeed:1.8,enemyCount:8,bossHp:50,bossType:'boss1',walls:10},
-  {name:'LEVEL 2',enemyHp:4,enemySpeed:2.2,enemyCount:10,bossHp:75,bossType:'boss2',walls:14},
-  {name:'LEVEL 3',enemyHp:6,enemySpeed:2.6,enemyCount:12,bossHp:100,bossType:'boss3',walls:18}
+  {name:'LEVEL 1',enemyHp:1,enemySpeed:1.2,enemyCount:8,bossHp:50,bossType:'boss1',walls:10},
+  {name:'LEVEL 2',enemyHp:1,enemySpeed:1.5,enemyCount:10,bossHp:75,bossType:'boss2',walls:14},
+  {name:'LEVEL 3',enemyHp:1,enemySpeed:1.8,enemyCount:12,bossHp:100,bossType:'boss3',walls:18},
+  {name:'LEVEL 4',enemyHp:2,enemySpeed:2.0,enemyCount:16,bossHp:120,bossType:'boss1',walls:12,morphBoss:true,multiSpawn:true}
 ];
 
 function buildWalls(){
   walls=[];
   const lv=levels[level-1];
-  for(let i=0;i<lv.walls;i++){
-    const bw=60,bh=30;
-    const x=60+Math.random()*(W-120-bw);
-    const y=200+Math.random()*(H-500);
+  for(let i=0;i<lv.walls*2;i++){
+    const bw=70,bh=34;
+    const x=70+Math.random()*(W-140-bw);
+    const y=120+Math.random()*(H-300);
     let ok=true;
-    for(const w of walls){if(Math.abs(w.x+w.w/2-(x+bw/2))<bw+20&&Math.abs(w.y+w.h/2-(y+bh/2))<bh+20){ok=false;break;}}
-    if(Math.abs(x+bw/2-player.x)<100&&Math.abs(y+bh/2-player.y)<100)ok=false;
+    for(const w of walls){if(Math.abs(w.x+w.w/2-(x+bw/2))<bw+30&&Math.abs(w.y+w.h/2-(y+bh/2))<bh+20){ok=false;break;}}
+    if(Math.abs(x+bw/2-player.x)<140&&Math.abs(y+bh/2-player.y)<140)ok=false;
     if(ok)walls.push({x,y,w:bw,h:bh,hp:3,maxHp:3});
   }
 }
@@ -149,23 +293,72 @@ function spawnEnemy(){
   if(side===0){x=60+Math.random()*(W-120);y=60;}
   else if(side===1){x=60;y=80+Math.random()*(H*0.4);}
   else{x=W-60;y=80+Math.random()*(H*0.4);}
-  enemies.push({x,y,w:48,h:48,angle:Math.PI/2,hp:lv.enemyHp,maxHp:lv.enemyHp,speed:lv.enemySpeed,score:200,color:C.magenta,fireCooldown:1+Math.random()*2,moveTimer:0});
+  enemies.push({x,y,w:56,h:56,angle:Math.PI/2,hp:lv.enemyHp,maxHp:lv.enemyHp,speed:lv.enemySpeed,score:200,color:C.magenta,fireCooldown:1+Math.random()*2,moveTimer:0});
+  // 技能3：新敌人出现时玩家无敌3秒
+  if(skills.newEnemyShield){player.invincible=Math.max(player.invincible,3);}
 }
 
 function spawnBoss(){
   const lv=levels[level-1];
-  enemies.push({type:'boss',bossType:lv.bossType,x:W/2,y:120,w:130,h:130,angle:Math.PI/2,hp:lv.bossHp,maxHp:lv.bossHp,speed:0.8,score:5000,color:C.red,fireCooldown:1,pattern:0,patternTimer:0});
+  enemies.push({type:'boss',bossType:lv.bossType,x:W/2,y:130,w:160,h:160,angle:Math.PI/2,hp:lv.bossHp,maxHp:lv.bossHp,speed:0.6,score:5000,color:C.red,fireCooldown:1,pattern:0,patternTimer:0,phase:1,phase2:difficulty==='hard',morph:lv.morphBoss?true:false,morphTimer:0,morphInvincible:0});
+}
+
+// 第四关Boss变换：在boss1/2/3间切换，变换时无敌
+function morphBossType(boss){
+  const types=['boss1','boss2','boss3'];
+  let nt;
+  do{nt=types[Math.floor(Math.random()*3)];}while(nt===boss.bossType);
+  boss.bossType=nt;
+  boss.morphInvincible=2.5; // 变换期间无敌2.5秒
+  boss.w=160;boss.h=160;
+  addParticle(boss.x,boss.y,C.yellow,30);
+  addParticle(boss.x,boss.y,C.red,20);
+  bossBanner=1.5;
+}
+
+// 友方坦克：自动行进攻击敌人
+function spawnAlly(){
+  allies.push({x:W/2,y:H-80,w:50,h:50,angle:-Math.PI/2,hp:4,maxHp:4,speed:3.5,fireCooldown:0,color:C.green});
+  addParticle(W/2,H-80,C.green,15);
+}
+
+// 技能1：随机刷出大号子弹
+function spawnBigBullet(){
+  if(enemies.length===0)return;
+  const target=enemies[Math.floor(Math.random()*enemies.length)];
+  const dx=target.x-player.x,dy=target.y-player.y;
+  const d=Math.sqrt(dx*dx+dy*dy)||1;
+  bullets.push({x:player.x,y:player.y,vx:dx/d*6,vy:dy/d*6,dmg:5,w:22,h:22,color:C.yellow,big:true});
+}
+
+// 技能4：随机向四周发射一群子弹
+function spawnBulletStorm(){
+  const n=12;
+  for(let i=0;i<n;i++){
+    const a=(i/n)*Math.PI*2+Math.random()*0.3;
+    bullets.push({x:player.x,y:player.y,vx:Math.cos(a)*7,vy:Math.sin(a)*7,dmg:2,w:8,h:8,color:C.magenta});
+  }
+  addParticle(player.x,player.y,C.magenta,20);
+}
+
+// 购买技能卡（每轮开始前的选技界面购买，本关生效）
+function buySkill(idx){
+  const def=skillDefs[idx];
+  if(!def||skills[def.id])return;
+  if(score<def.cost)return;
+  score-=def.cost;
+  skills[def.id]=true;
 }
 
 function fireBullet(){
   const p=player.power;
   const a=player.angle;
   const nx=Math.cos(a),ny=Math.sin(a);
-  bullets.push({x:player.x+nx*30,y:player.y+ny*30,vx:nx*9,vy:ny*9,dmg:1,w:10,h:10,color:C.cyan});
+  bullets.push({x:player.x+nx*30,y:player.y+ny*30,vx:nx*9,vy:ny*9,dmg:1,w:10,h:10,color:player.color});
   if(p>=2){
     const pa1=a-0.15,pa2=a+0.15;
-    bullets.push({x:player.x+Math.cos(pa1)*30,y:player.y+Math.sin(pa1)*30,vx:Math.cos(pa1)*9,vy:Math.sin(pa1)*9,dmg:1,w:8,h:8,color:C.cyan});
-    bullets.push({x:player.x+Math.cos(pa2)*30,y:player.y+Math.sin(pa2)*30,vx:Math.cos(pa2)*9,vy:Math.sin(pa2)*9,dmg:1,w:8,h:8,color:C.cyan});
+    bullets.push({x:player.x+Math.cos(pa1)*30,y:player.y+Math.sin(pa1)*30,vx:Math.cos(pa1)*9,vy:Math.sin(pa1)*9,dmg:1,w:8,h:8,color:player.color});
+    bullets.push({x:player.x+Math.cos(pa2)*30,y:player.y+Math.sin(pa2)*30,vx:Math.cos(pa2)*9,vy:Math.sin(pa2)*9,dmg:1,w:8,h:8,color:player.color});
   }
   if(p>=3){
     const pa1=a-0.35,pa2=a+0.35;
@@ -175,20 +368,25 @@ function fireBullet(){
 }
 
 function enemyFire(e,targetAngle){
-  enemyBullets.push({x:e.x+Math.cos(targetAngle)*30,y:e.y+Math.sin(targetAngle)*30,vx:Math.cos(targetAngle)*5,vy:Math.sin(targetAngle)*5,w:8,h:8,color:e.color});
+  enemyBullets.push({x:e.x+Math.cos(targetAngle)*30,y:e.y+Math.sin(targetAngle)*30,vx:Math.cos(targetAngle)*3.8,vy:Math.sin(targetAngle)*3.8,w:8,h:8,color:e.color});
 }
 
 function bossFire(b){
+  const p2=b.phase===2;
+  const f=p2?1.3:1; // 二阶段弹速倍率
   b.patternTimer++;
-  if(b.patternTimer>90){b.patternTimer=0;b.pattern=(b.pattern+1)%3;}
+  if(b.patternTimer>(p2?60:90)){b.patternTimer=0;b.pattern=(b.pattern+1)%3;}
   if(b.pattern===0){
-    for(let i=0;i<10;i++){const a=(i/10)*Math.PI*2+gameTime;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*3.5,vy:Math.sin(a)*3.5,w:10,h:10,color:C.red});}
+    const n=p2?14:10;
+    for(let i=0;i<n;i++){const a=(i/n)*Math.PI*2+gameTime;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*3*f,vy:Math.sin(a)*3*f,w:10,h:10,color:p2?C.magenta:C.red});}
   }else if(b.pattern===1){
-    for(let i=-2;i<=2;i++){const a=b.angle+i*0.25;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*5,vy:Math.sin(a)*5,w:9,h:9,color:C.yellow});}
+    const n=p2?7:5;
+    for(let i=-(n-1)/2;i<=(n-1)/2;i++){const a=b.angle+i*0.22;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*4*f,vy:Math.sin(a)*4*f,w:9,h:9,color:C.yellow});}
   }else{
     const dx=player.x-b.x,dy=player.y-b.y;
     const a=Math.atan2(dy,dx);
-    for(let i=-1;i<=1;i++){const aa=a+i*0.3;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*4.5,vy:Math.sin(aa)*4.5,w:9,h:9,color:C.magenta});}
+    const spread=p2?5:3;
+    for(let i=-(spread-1)/2;i<=(spread-1)/2;i++){const aa=a+i*0.22;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(aa)*3.8*f,vy:Math.sin(aa)*3.8*f,w:9,h:9,color:C.magenta});}
   }
 }
 
@@ -203,33 +401,55 @@ function hitWall(x,y,r){
 
 function startGame(){
   if(state==='loading')return;
-  state='playing';score=0;gameTime=0;level=1;
-  player.x=W/2;player.y=H-120;player.hp=player.maxHp;player.invincible=0;player.power=1;player.angle=-Math.PI/2;
+  score=0;gameTime=0;level=1;
+  const s=ships[selectedShip];
+  player.x=W/2;player.y=H-120;player.angle=-Math.PI/2;
+  player.speed=s.speed;player.maxHp=s.hp;player.hp=s.hp;
+  player.fireRate=s.fireRate;player.power=s.startPower;player.color=s.color;
+  player.invincible=0;player.fireCooldown=0;
   bullets=[];enemies=[];enemyBullets=[];particles=[];items=[];
-  kills=0;bossSpawned=false;
+  allies=[];
+  skills={bigBullet:false,allyTank:false,newEnemyShield:false,bulletStorm:false};
+  skillTimers={bigBullet:0,bulletStorm:0};
+  killCountForAlly=0;
+  kills=0;bossSpawned=false;bossBanner=0;
   buildWalls();
   startBGM();
+  state='skillselect'; // 每轮开始前先选技能
 }
 
 function nextLevel(){
   level++;
-  if(level>3){state='victory';return;}
-  state='playing';
+  if(level>4){state='victory';return;}
   player.hp=Math.min(player.maxHp,player.hp+1);
   bullets=[];enemies=[];enemyBullets=[];particles=[];items=[];
+  allies=[];
+  skills={bigBullet:false,allyTank:false,newEnemyShield:false,bulletStorm:false};
+  skillTimers={bigBullet:0,bulletStorm:0};
+  killCountForAlly=0;
   kills=0;bossSpawned=false;
   buildWalls();
+  state='skillselect'; // 每轮开始前先选技能
 }
 
 function update(dt){
   gameTime+=dt;
+  if(bossBanner>0)bossBanner-=dt;
   for(const s of stars){s.y+=s.speed;if(s.y>H){s.y=0;s.x=Math.random()*W;}}
   if(state!=='playing')return;
   const lv=levels[level-1];
 
   if(!bossSpawned&&enemies.length===0){
     if(kills>=lv.enemyCount){bossSpawned=true;spawnBoss();}
-    else if(enemies.length<3){spawnEnemy();}
+    else if(lv.multiSpawn){
+      // 第四关：敌人同时出现（一次刷3辆）
+      for(let i=0;i<3;i++)spawnEnemy();
+    }else if(enemies.length<3){spawnEnemy();}
+  }
+
+  // 技能3：新敌人出现时玩家无敌3秒
+  if(skills.newEnemyShield){
+    // 在spawnEnemy里已设置，这里持续递减
   }
 
   let mx=0,my=0;
@@ -243,15 +463,21 @@ function update(dt){
     let diff=target-player.angle;
     while(diff>Math.PI)diff-=Math.PI*2;
     while(diff<-Math.PI)diff+=Math.PI*2;
-    player.angle+=diff*0.25;
-    let nx=player.x+mx*player.speed,ny=player.y+my*player.speed;
+    // 快速转向：每秒最多转12弧度（约1.9圈），接近目标时直接对准
+    const turnStep=12*dt;
+    player.angle+=Math.abs(diff)<turnStep?diff:Math.sign(diff)*turnStep;
+    // 归一化移动方向（斜着走不会更快），摇杆轻推可慢速
+    const ml=Math.hypot(mx,my);
+    if(ml>1){mx/=ml;my/=ml;}
+    const moveDist=player.speed*dt*60;
+    let nx=player.x+mx*moveDist,ny=player.y+my*moveDist;
     nx=Math.max(30,Math.min(W-30,nx));ny=Math.max(30,Math.min(H-30,ny));
-    if(!hitWall(nx,ny,24)){player.x=nx;player.y=ny;}
-    else if(!hitWall(player.x,ny,24)){player.y=ny;}
-    else if(!hitWall(nx,player.y,24)){player.x=nx;}
+    if(!hitWall(nx,ny,30)){player.x=nx;player.y=ny;}
+    else if(!hitWall(player.x,ny,30)){player.y=ny;}
+    else if(!hitWall(nx,player.y,30)){player.x=nx;}
   }
   player.fireCooldown-=dt;
-  if((keys[' ']||keys['z']||touchFiring)&&player.fireCooldown<=0){fireBullet();player.fireCooldown=0.35;}
+  if((keys[' ']||keys['z']||touchFiring)&&player.fireCooldown<=0){fireBullet();player.fireCooldown=player.fireRate;}
   if(player.invincible>0)player.invincible-=dt;
 
   for(let i=bullets.length-1;i>=0;i--){
@@ -263,13 +489,22 @@ function update(dt){
     for(let j=enemies.length-1;j>=0;j--){
       const e=enemies[j];
       if(rectHit(b,e)){
+        // Boss变换期间无敌
+        if(e.type==='boss'&&e.morphInvincible>0){
+          addParticle(b.x,b.y,C.yellow,3);hit=true;break;
+        }
         e.hp-=b.dmg;addParticle(b.x,b.y,C.cyan,4);hit=true;
         if(e.hp<=0){
           score+=e.score;addParticle(e.x,e.y,e.color,18);addParticle(e.x,e.y,C.white,8);
           if(e.type==='boss'){
-            if(level>=3){state='victory';stopBGM();}
+            if(level>=4){state='victory';stopBGM();}
             else{state='levelclear';}
-          }else{kills++;if(Math.random()<0.25){items.push({x:e.x,y:e.y,type:Math.random()<0.5?'power':'hp'});}}
+          }else{
+            kills++;
+            // 技能2：每击败3辆敌人召唤友方坦克
+            if(skills.allyTank){killCountForAlly++;if(killCountForAlly>=3){killCountForAlly=0;spawnAlly();}}
+            if(Math.random()<0.5){items.push({x:e.x,y:e.y,type:Math.random()<0.5?'power':'hp'});}
+          }
           enemies.splice(j,1);
         }
         break;
@@ -285,30 +520,71 @@ function update(dt){
     let diff=targetAngle-e.angle;
     while(diff>Math.PI)diff-=Math.PI*2;
     while(diff<-Math.PI)diff+=Math.PI*2;
-    e.angle+=diff*0.06;
+    e.angle+=diff*0.03;
     if(e.type==='boss'){
+      // 第四关Boss变换：定期在boss1/2/3间切换
+      if(e.morph){
+        e.morphTimer+=dt;
+        if(e.morphInvincible>0)e.morphInvincible-=dt;
+        if(e.morphTimer>8){e.morphTimer=0;morphBossType(e);}
+      }
+      // 二阶段变身：Boss2/Boss3 血量低于一半时触发
+      if(e.phase2&&e.phase===1&&e.hp<=e.maxHp/2){
+        e.phase=2;e.speed=1.0;e.w=180;e.h=180;
+        e.fireCooldown=0.8;
+        addParticle(e.x,e.y,C.yellow,40);addParticle(e.x,e.y,C.red,30);
+        bossBanner=2.5;
+      }
       const dist=Math.sqrt(dx*dx+dy*dy);
       if(dist>250){
         const nx=e.x+Math.cos(e.angle)*e.speed,ny=e.y+Math.sin(e.angle)*e.speed;
-        if(nx>70&&nx<W-70&&ny>70&&ny<H-70&&!hitWall(nx,ny,60)){e.x=nx;e.y=ny;}
+        if(nx>90&&nx<W-90&&ny>90&&ny<H-90&&!hitWall(nx,ny,80)){e.x=nx;e.y=ny;}
       }
       e.fireCooldown-=dt;
-      if(e.fireCooldown<=0){bossFire(e);e.fireCooldown=0.7;}
+      if(e.fireCooldown<=0){bossFire(e);e.fireCooldown=e.phase===2?0.7:1.0;}
     }else{
       const dist=Math.sqrt(dx*dx+dy*dy);
       if(dist>180){
         const nx=e.x+Math.cos(e.angle)*e.speed,ny=e.y+Math.sin(e.angle)*e.speed;
-        if(nx>40&&nx<W-40&&ny>40&&ny<H-40&&!hitWall(nx,ny,26)){e.x=nx;e.y=ny;}
+        if(nx>45&&nx<W-45&&ny>45&&ny<H-45&&!hitWall(nx,ny,28)){e.x=nx;e.y=ny;}
         else{e.angle+=1.5;}
       }
       e.fireCooldown-=dt;
-      if(e.fireCooldown<=0&&dist<520){enemyFire(e,targetAngle);e.fireCooldown=1.5+Math.random()*1.5;}
+      if(e.fireCooldown<=0&&dist<700){enemyFire(e,targetAngle);e.fireCooldown=2.5+Math.random()*2;}
       if(player.invincible<=0&&rectHit(player,e)){
         player.hp--;player.invincible=2;addParticle(e.x,e.y,e.color,15);
         e.hp-=2;if(e.hp<=0){enemies.splice(i,1);kills++;}
         if(player.hp<=0){state='gameover';stopBGM();}
       }
     }
+  }
+
+  // 技能计时器：巨型炮弹（每5秒）、弹幕风暴（每8秒）
+  if(skills.bigBullet){skillTimers.bigBullet+=dt;if(skillTimers.bigBullet>=5){skillTimers.bigBullet=0;spawnBigBullet();}}
+  if(skills.bulletStorm){skillTimers.bulletStorm+=dt;if(skillTimers.bulletStorm>=8){skillTimers.bulletStorm=0;spawnBulletStorm();}}
+
+  // 友方坦克更新
+  for(let i=allies.length-1;i>=0;i--){
+    const a=allies[i];
+    // 找最近敌人
+    let nearest=null,nd=Infinity;
+    for(const e of enemies){const d=(e.x-a.x)**2+(e.y-a.y)**2;if(d<nd){nd=d;nearest=e;}}
+    if(nearest){
+      const ta=Math.atan2(nearest.y-a.y,nearest.x-a.x);
+      let diff=ta-a.angle;while(diff>Math.PI)diff-=Math.PI*2;while(diff<-Math.PI)diff+=Math.PI*2;
+      a.angle+=diff*0.08;
+      const d=Math.sqrt(nd);
+      if(d>200){const nx=a.x+Math.cos(a.angle)*a.speed,ny=a.y+Math.sin(a.angle)*a.speed;
+        if(nx>30&&nx<W-30&&ny>30&&ny<H-30&&!hitWall(nx,ny,25)){a.x=nx;a.y=ny;}}
+      a.fireCooldown-=dt;
+      if(a.fireCooldown<=0&&d<600){
+        bullets.push({x:a.x+Math.cos(a.angle)*25,y:a.y+Math.sin(a.angle)*25,vx:Math.cos(a.angle)*8,vy:Math.sin(a.angle)*8,dmg:1,w:8,h:8,color:C.green});
+        a.fireCooldown=0.4;
+      }
+    }
+    // 友方坦克被敌人撞击掉血
+    for(const e of enemies){if(rectHit(a,e)){a.hp-=0.05;}}
+    if(a.hp<=0){addParticle(a.x,a.y,C.green,15);allies.splice(i,1);}
   }
 
   for(let i=enemyBullets.length-1;i>=0;i--){
@@ -335,19 +611,26 @@ function update(dt){
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.95;p.vy*=0.95;p.life-=dt*2;if(p.life<=0)particles.splice(i,1);}
 }
 
-function drawTank(x,y,angle,w,h,color,isPlayer){
-  const img=isPlayer?assets.player:assets.enemy;
+function drawTank(x,y,angle,w,h,color,isPlayer,skin){
+  // 玩家坦克用对应皮肤的贴图，无光晕
+  const img=isPlayer?(skin&&skin.img?skin.img:assets.player):assets.enemy;
+  const scale=isPlayer?1.4:1.2;
+  const dw=w*scale, dh=h*scale;
   if(img&&img.complete&&img.naturalWidth>0){
-    ctx.save();ctx.translate(x,y);ctx.rotate(angle+Math.PI/2);ctx.shadowColor=color;ctx.shadowBlur=12;
-    ctx.drawImage(img,-w/2,-h/2,w,h);ctx.shadowBlur=0;ctx.restore();
+    ctx.save();ctx.translate(x,y);ctx.rotate(angle+Math.PI/2);
+    ctx.drawImage(img,-dw/2,-dh/2,dw,dh);
+    ctx.restore();
   }else{
     ctx.save();ctx.translate(x,y);ctx.rotate(angle);
+    // 履带
     ctx.fillStyle='#1a1a1a';
     ctx.fillRect(-w/2,-h/2+3,10,h-6);
     ctx.fillRect(w/2-10,-h/2+3,10,h-6);
+    // 车身
     ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=12;
     ctx.fillRect(-w/2+10,-h/2+7,w-20,h-14);
     ctx.shadowBlur=0;
+    // 炮塔
     ctx.fillStyle='#0a0a0a';ctx.beginPath();ctx.arc(0,0,w/4.5,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=8;
     ctx.fillRect(0,-4,w/2+12,8);
@@ -360,9 +643,11 @@ function drawTank(x,y,angle,w,h,color,isPlayer){
 function drawBossTank(x,y,angle,w,h,bossType){
   const typeToImg={boss1:assets.boss1,boss2:assets.boss2,boss3:assets.boss3};
   const img=typeToImg[bossType]||assets.boss1;
+  const scale=1.2;
+  const dw=w*scale, dh=h*scale;
   if(img&&img.complete&&img.naturalWidth>0){
-    ctx.save();ctx.translate(x,y);ctx.rotate(angle+Math.PI/2);ctx.shadowColor=C.red;ctx.shadowBlur=20;
-    ctx.drawImage(img,-w/2,-h/2,w,h);ctx.shadowBlur=0;ctx.restore();
+    ctx.save();ctx.translate(x,y);ctx.rotate(angle+Math.PI/2);
+    ctx.drawImage(img,-dw/2,-dh/2,dw,dh);ctx.restore();
   }else{
     drawTank(x,y,angle,w,h,C.red,false);
   }
@@ -393,24 +678,244 @@ function drawHUD(){
   ctx.fillText('HP: ',20,105);
   for(let i=0;i<player.maxHp;i++){ctx.fillStyle=i<player.hp?C.red:'#333';ctx.shadowColor=i<player.hp?C.red:'#000';ctx.fillRect(60+i*30,93,20,12);}
   ctx.fillStyle='#888';ctx.shadowBlur=0;ctx.fillText('KILLS: '+kills+'/'+lv.enemyCount,20,130);
+  ctx.textAlign='right';ctx.font='bold 16px sans-serif';
+  ctx.fillStyle=difficulty==='hard'?C.red:C.green;
+  ctx.shadowColor=difficulty==='hard'?C.red:C.green;ctx.shadowBlur=8;
+  ctx.fillText(difficulty==='hard'?'HARD MODE':'EASY MODE',W-20,130);
+  ctx.restore();
+}
+
+// 已激活技能展示（游戏左下角，仅显示，购买在每轮开始前的选技界面）
+function drawSkillCards(){
+  ctx.save();
+  const cw=58,ch=130,cx0=12,cy0=252;
+  let col=0;
+  for(let i=0;i<skillDefs.length;i++){
+    const def=skillDefs[i];
+    if(!skills[def.id])continue;
+    const x=cx0+col*62,y=cy0;col++;
+    ctx.fillStyle='rgba(0,255,156,0.2)';
+    ctx.strokeStyle=C.green;
+    ctx.lineWidth=2;
+    ctx.shadowColor=C.green;
+    ctx.shadowBlur=8;
+    ctx.beginPath();
+    if(ctx.roundRect){ctx.roundRect(x,y,cw,ch,6);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(x,y,cw,ch);ctx.strokeRect(x,y,cw,ch);}
+    ctx.shadowBlur=0;
+    // 名称
+    ctx.fillStyle=C.green;
+    ctx.font='bold 12px sans-serif';ctx.textAlign='center';
+    ctx.fillText(def.name,x+cw/2,y+24);
+    // 描述
+    ctx.fillStyle='#bbb';ctx.font='10px sans-serif';
+    const words=def.desc.match(/.{1,6}/g)||[def.desc];
+    for(let w=0;w<Math.min(words.length,3);w++){ctx.fillText(words[w],x+cw/2,y+48+w*12);}
+    // 状态
+    ctx.font='bold 13px sans-serif';
+    ctx.fillText('已激活',x+cw/2,y+ch-12);
+  }
+  ctx.restore();
+}
+
+// 选技界面（每轮开始前）
+function drawSkillSelect(){
+  ctx.save();ctx.textAlign='center';
+  ctx.font='bold 34px sans-serif';ctx.fillStyle=C.cyan;ctx.shadowColor=C.cyan;ctx.shadowBlur=20;
+  ctx.fillText('LEVEL '+level+' · SELECT SKILLS 技能选择',640,90);
+  ctx.shadowBlur=0;
+  ctx.font='22px sans-serif';ctx.fillStyle=C.yellow;ctx.shadowColor=C.yellow;ctx.shadowBlur=8;
+  ctx.fillText('当前得分: '+score,640,135);
+  ctx.shadowBlur=0;
+  // 4张大技能卡
+  const xs=[140,400,660,920],cy=180,cw=220,ch=280;
+  for(let i=0;i<skillDefs.length;i++){
+    const def=skillDefs[i];
+    const x=xs[i],owned=skills[def.id],canAfford=score>=def.cost;
+    const col=owned?C.green:(canAfford?C.cyan:'#666');
+    ctx.save();
+    ctx.fillStyle=owned?'rgba(0,255,156,0.18)':(canAfford?'rgba(0,240,255,0.1)':'rgba(100,100,100,0.12)');
+    ctx.strokeStyle=col;ctx.lineWidth=owned?4:2;
+    ctx.shadowColor=col;ctx.shadowBlur=owned?25:(canAfford?15:0);
+    ctx.beginPath();
+    if(ctx.roundRect){ctx.roundRect(x,cy,cw,ch,14);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(x,cy,cw,ch);ctx.strokeRect(x,cy,cw,ch);}
+    ctx.shadowBlur=0;
+    ctx.textAlign='center';
+    // 编号
+    ctx.fillStyle=col;ctx.font='bold 20px sans-serif';
+    ctx.fillText('['+(i+1)+']',x+cw/2,cy+38);
+    // 名称
+    ctx.font='bold 24px sans-serif';
+    ctx.fillText(def.name,x+cw/2,cy+80);
+    // 描述（6字换行）
+    ctx.fillStyle='#ccc';ctx.font='15px sans-serif';
+    const words=def.desc.match(/.{1,8}/g)||[def.desc];
+    for(let w=0;w<Math.min(words.length,3);w++){ctx.fillText(words[w],x+cw/2,cy+130+w*24);}
+    // 价格/状态
+    ctx.fillStyle=owned?C.green:(canAfford?C.yellow:'#888');
+    ctx.font='bold 20px sans-serif';
+    ctx.fillText(owned?'✓ 已激活':def.cost+' 分',x+cw/2,cy+ch-30);
+    ctx.restore();
+  }
+  // START 按钮
+  ctx.save();
+  ctx.fillStyle=C.yellow;ctx.shadowColor=C.yellow;ctx.shadowBlur=20;
+  ctx.beginPath();
+  if(ctx.roundRect){ctx.roundRect(640-150,525,300,70,14);ctx.fill();}
+  else{ctx.fillRect(640-150,525,300,70);}
+  ctx.shadowBlur=0;ctx.fillStyle='#04120a';ctx.font='bold 28px sans-serif';
+  ctx.fillText('START ▶',640,570);
+  ctx.restore();
+  ctx.save();ctx.font='15px sans-serif';ctx.fillStyle='#888';ctx.shadowBlur=0;
+  ctx.fillText(isTouch?'点卡片购买技能 · 点 START 开战':'按 1-4 购买技能 · ENTER 开战',640,660);
+  ctx.restore();
   ctx.restore();
 }
 
 function drawLoading(){
-  ctx.save();ctx.textAlign='center';ctx.font='bold 40px sans-serif';ctx.fillStyle=C.cyan;ctx.shadowColor=C.cyan;ctx.shadowBlur=20;ctx.fillText('LOADING...',W/2,H/2);ctx.font='20px sans-serif';ctx.fillStyle=C.white;ctx.shadowBlur=5;ctx.fillText(imgsLoaded+'/5 ASSETS LOADED',W/2,H/2+40);ctx.restore();
+  ctx.save();ctx.textAlign='center';ctx.font='bold 40px sans-serif';ctx.fillStyle=C.cyan;ctx.shadowColor=C.cyan;ctx.shadowBlur=20;ctx.fillText('LOADING...',W/2,H/2);ctx.font='20px sans-serif';ctx.fillStyle=C.white;ctx.shadowBlur=5;ctx.fillText(imgsLoaded+'/9 ASSETS LOADED',W/2,H/2+40);ctx.restore();
 }
 
+function drawMenuBtn(cx,cy,w,h,label,color){
+  ctx.save();
+  ctx.fillStyle=color;
+  ctx.strokeStyle=color;ctx.lineWidth=3;ctx.shadowColor=color;ctx.shadowBlur=18;
+  ctx.beginPath();
+  if(ctx.roundRect){ctx.roundRect(cx-w/2,cy-h/2,w,h,12);ctx.fill();}
+  else{ctx.fillRect(cx-w/2,cy-h/2,w,h);}
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#04120a';ctx.font='bold 24px sans-serif';ctx.textAlign='center';
+  ctx.fillText(label,cx,cy+9);
+  ctx.restore();
+}
 function drawMenu(){
   ctx.save();ctx.textAlign='center';
-  ctx.font='bold 60px sans-serif';ctx.fillStyle=C.green;ctx.shadowColor=C.green;ctx.shadowBlur=30;ctx.fillText('NEON',W/2,400);
-  ctx.fillStyle=C.yellow;ctx.shadowColor=C.yellow;ctx.fillText('TANKS',W/2,480);
-  ctx.font='24px sans-serif';ctx.fillStyle=C.white;ctx.shadowColor=C.white;ctx.shadowBlur=5;ctx.fillText('PRESS ENTER OR SPACE TO START',W/2,600);
-  ctx.font='18px sans-serif';ctx.fillStyle='#888';ctx.shadowBlur=0;
-  ctx.fillText('WASD / ARROWS: MOVE',W/2,700);
-  ctx.fillText('SPACE / Z: FIRE',W/2,730);
-  ctx.fillText('P: PAUSE',W/2,760);
-  if(isTouch){ctx.fillStyle=C.cyan;ctx.fillText('TOUCH LEFT: MOVE / RIGHT: FIRE',W/2,790);}
-  ctx.fillStyle=C.green;ctx.fillText('3 LEVELS + 3 BOSSES',W/2,820);
+  // 左上角LOGO
+  ctx.textAlign='left';ctx.font='bold 30px sans-serif';
+  ctx.fillStyle=C.green;ctx.shadowColor=C.green;ctx.shadowBlur=15;ctx.fillText('NEON TANKS',50,58);
+  // 顶部步骤指示器（3个圆点）
+  ctx.textAlign='center';ctx.shadowBlur=0;
+  for(let i=0;i<3;i++){
+    const on=i===menuPage;
+    ctx.beginPath();ctx.arc(590+i*50,48,on?8:5,0,Math.PI*2);
+    ctx.fillStyle=on?C.cyan:'rgba(255,255,255,0.25)';ctx.fill();
+  }
+  if(menuPage===0)drawMenuShip();
+  else if(menuPage===1)drawMenuSkin();
+  else drawMenuMode();
+  ctx.restore();
+}
+// 第1页：战机选择
+function drawMenuShip(){
+  ctx.font='19px sans-serif';ctx.fillStyle=C.white;ctx.shadowColor=C.white;ctx.shadowBlur=5;ctx.fillText('STEP 1/3 · SELECT YOUR VEHICLE 选择战机',640,100);
+  const cardXs=[300,640,980];
+  for(let k=0;k<3;k++){
+    const s=ships[k],cx=cardXs[k],selected=k===selectedShip;
+    const cy=165,cw=290,ch=380;
+    ctx.save();
+    ctx.fillStyle=selected?'rgba(0,255,156,0.12)':'rgba(255,255,255,0.04)';
+    ctx.strokeStyle=s.color;ctx.lineWidth=selected?4:2;
+    ctx.shadowColor=s.color;ctx.shadowBlur=selected?25:6;
+    ctx.beginPath();
+    if(ctx.roundRect){ctx.roundRect(cx-cw/2,cy,cw,ch,12);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(cx-cw/2,cy,cw,ch);ctx.strokeRect(cx-cw/2,cy,cw,ch);}
+    ctx.restore();
+    drawTank(cx,cy+95,-Math.PI/2,60,60,s.color,true,skins[selectedSkin]);
+    ctx.save();ctx.textAlign='center';
+    ctx.font='bold 26px sans-serif';ctx.fillStyle=s.color;ctx.shadowColor=s.color;ctx.shadowBlur=10;
+    ctx.fillText(s.name,cx,cy+190);
+    ctx.font='19px sans-serif';ctx.fillStyle=C.white;ctx.shadowBlur=0;ctx.fillText(s.label,cx,cy+222);
+    ctx.font='17px sans-serif';ctx.fillStyle='#bbb';
+    ctx.fillText('HP:  '+'■'.repeat(s.hp)+'□'.repeat(6-s.hp),cx,cy+270);
+    ctx.fillText('SPD:  '+s.speed.toFixed(1),cx,cy+302);
+    ctx.fillText('RATE: '+(1/s.fireRate).toFixed(1)+' /s',cx,cy+334);
+    ctx.fillText('GUN:  '+(s.startPower===2?'DUAL':'SINGLE'),cx,cy+366);
+    if(selected){
+      ctx.font='bold 17px sans-serif';ctx.fillStyle=s.color;ctx.shadowColor=s.color;ctx.shadowBlur=10;
+      ctx.fillText('▶ SELECTED ◀',cx,cy+ch-18);
+    }
+    ctx.restore();
+  }
+  drawMenuBtn(640,620,280,64,'NEXT ▶',C.cyan);
+  ctx.save();ctx.font='14px sans-serif';ctx.fillStyle='#888';ctx.shadowBlur=0;
+  ctx.fillText(isTouch?'点卡片选车 · 点 NEXT 下一步':'◀▶ 选车 · ENTER 下一步',640,700);
+  ctx.restore();
+}
+// 第2页：皮肤选择
+function drawMenuSkin(){
+  ctx.font='19px sans-serif';ctx.fillStyle=C.white;ctx.shadowColor=C.white;ctx.shadowBlur=5;ctx.fillText('STEP 2/3 · SELECT SKIN 选择皮肤',640,100);
+  const n=skins.length,gap=190,cx0=640-(n-1)*gap/2,cy=350,cw=155,ch=210;
+  for(let i=0;i<n;i++){
+    const cx=cx0+i*gap,on=selectedSkin===i,col=skins[i].color;
+    ctx.save();
+    ctx.fillStyle=on?'rgba(0,240,255,0.15)':'rgba(255,255,255,0.04)';
+    ctx.strokeStyle=col;ctx.lineWidth=on?4:2;
+    ctx.shadowColor=col;ctx.shadowBlur=on?22:5;
+    ctx.beginPath();
+    if(ctx.roundRect){ctx.roundRect(cx-cw/2,cy-ch/2,cw,ch,12);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(cx-cw/2,cy-ch/2,cw,ch);ctx.strokeRect(cx-cw/2,cy-ch/2,cw,ch);}
+    ctx.shadowBlur=0;
+    // 角色预览图（大图）
+    const si=skins[i].img;
+    if(si&&si.complete&&si.naturalWidth>0){
+      const ratio=si.width/si.height;
+      const ph=110,pw=ph*ratio;
+      ctx.drawImage(si,cx-pw/2,cy-25,pw,ph);
+    }else{
+      ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=12;
+      ctx.beginPath();ctx.arc(cx,cy-25,36,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    }
+    // 名字
+    ctx.font='bold 17px sans-serif';ctx.fillStyle=on?col:'#fff';
+    ctx.shadowColor=on?col:'transparent';ctx.shadowBlur=on?8:0;
+    ctx.fillText(skins[i].name,cx,cy+ch/2-14);
+    if(on){
+      ctx.font='bold 13px sans-serif';ctx.fillStyle=C.cyan;ctx.shadowColor=C.cyan;ctx.shadowBlur=8;
+      ctx.fillText('▶ SELECTED ◀',cx,cy+ch/2+12);
+    }
+    ctx.restore();
+  }
+  drawMenuBtn(360,620,240,64,'◀ BACK',C.yellow);
+  drawMenuBtn(920,620,240,64,'NEXT ▶',C.cyan);
+  ctx.save();ctx.font='14px sans-serif';ctx.fillStyle='#888';ctx.shadowBlur=0;
+  ctx.fillText(isTouch?'点卡片选皮肤 · 点 NEXT 下一步':'◀▶/Q·E 换皮肤 · ENTER 下一步 · ESC 返回',640,700);
+  ctx.restore();
+}
+// 第3页：难度选择
+function drawMenuMode(){
+  ctx.font='19px sans-serif';ctx.fillStyle=C.white;ctx.shadowColor=C.white;ctx.shadowBlur=5;ctx.fillText('STEP 3/3 · SELECT DIFFICULTY 选择难度',640,100);
+  ctx.font='17px sans-serif';ctx.fillStyle='#aaa';ctx.shadowBlur=0;
+  ctx.fillText('战车: '+ships[selectedShip].name+' · 皮肤: '+skins[selectedSkin].name,640,140);
+  const modes=[
+    {id:'easy',label:'EASY 简单',desc:'BOSS 单形态',desc2:'轻松上手',color:C.green,cx:470},
+    {id:'hard',label:'HARD 困难',desc:'BOSS 双形态',desc2:'半血狂暴变身',color:C.red,cx:810}
+  ];
+  for(const md of modes){
+    const on=difficulty===md.id;
+    ctx.save();
+    ctx.fillStyle=on?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.03)';
+    ctx.strokeStyle=md.color;ctx.lineWidth=on?5:2;
+    ctx.shadowColor=md.color;ctx.shadowBlur=on?28:6;
+    ctx.beginPath();
+    if(ctx.roundRect){ctx.roundRect(md.cx-150,190,300,240,14);ctx.fill();ctx.stroke();}
+    else{ctx.fillRect(md.cx-150,190,300,240);ctx.strokeRect(md.cx-150,190,300,240);}
+    ctx.shadowBlur=0;ctx.textAlign='center';
+    ctx.fillStyle=md.color;ctx.shadowColor=md.color;ctx.shadowBlur=10;
+    ctx.font='bold 34px sans-serif';ctx.fillText(md.label,md.cx,290);
+    ctx.shadowBlur=0;
+    ctx.font='18px sans-serif';ctx.fillStyle='#ccc';ctx.fillText(md.desc,md.cx,340);
+    ctx.fillStyle='#999';ctx.fillText(md.desc2,md.cx,370);
+    if(on){
+      ctx.font='bold 19px sans-serif';ctx.fillStyle=md.color;ctx.shadowColor=md.color;ctx.shadowBlur=10;
+      ctx.fillText('✓ SELECTED',md.cx,410);
+    }
+    ctx.restore();
+  }
+  drawMenuBtn(640,510,300,70,'START ▶',C.yellow);
+  drawMenuBtn(200,510,180,54,'◀ BACK',C.yellow);
+  ctx.save();ctx.font='14px sans-serif';ctx.fillStyle='#888';ctx.shadowBlur=0;
+  ctx.fillText(isTouch?'点选难度 · 点 START 开战':'1 简单 · 2 困难 · ENTER 开战 · ESC 返回',640,700);
   ctx.restore();
 }
 
@@ -467,9 +972,10 @@ function render(){
   for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
   for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
   for(const s of stars){ctx.fillStyle='rgba(255,255,255,'+(0.3+s.speed/4)+')';ctx.fillRect(s.x,s.y,s.size,s.size);}
-  if(state==='loading'){drawLoading();if(imgsLoaded>=5)state='menu';return;}
+  if(state==='loading'){drawLoading();if(imgsLoaded>=9)state='menu';return;}
   if(state==='menu'){drawMenu();return;}
   if(state==='levelclear'){drawLevelClear();return;}
+  if(state==='skillselect'){drawSkillSelect();return;}
   if(state==='victory'){drawVictory();return;}
 
   for(const w of walls){
@@ -488,6 +994,20 @@ function render(){
 
   for(const e of enemies){
     if(e.type==='boss'){
+      // 变换无敌期：金色护盾闪烁
+      if(e.morphInvincible>0){
+        ctx.save();ctx.strokeStyle=C.yellow;ctx.shadowColor=C.yellow;ctx.shadowBlur=25;ctx.lineWidth=6;
+        ctx.globalAlpha=0.5+Math.sin(gameTime*15)*0.3;
+        ctx.beginPath();ctx.arc(e.x,e.y,e.w/2+15,0,Math.PI*2);ctx.stroke();
+        ctx.restore();
+      }
+      if(e.phase===2){
+        const pulse=e.w/2+Math.sin(gameTime*8)*10;
+        ctx.save();ctx.strokeStyle=C.magenta;ctx.shadowColor=C.magenta;ctx.shadowBlur=25;ctx.lineWidth=5;
+        ctx.globalAlpha=0.7;
+        ctx.beginPath();ctx.arc(e.x,e.y,pulse,0,Math.PI*2);ctx.stroke();
+        ctx.restore();
+      }
       drawBossTank(e.x,e.y,e.angle,e.w,e.h,e.bossType);
     }else{
       drawTank(e.x,e.y,e.angle,e.w,e.h,e.color,false);
@@ -495,9 +1015,41 @@ function render(){
     }
   }
   for(const it of items)drawItem(it);
-  if(player.invincible<=0||Math.floor(player.invincible*10)%2===0){drawTank(player.x,player.y,player.angle,player.w,player.h,C.cyan,true);}
+  // 友方坦克
+  for(const a of allies){
+    drawTank(a.x,a.y,a.angle,a.w,a.h,a.color,false);
+    const bw=(a.hp/a.maxHp)*a.w;
+    ctx.fillStyle='#333';ctx.fillRect(a.x-a.w/2,a.y-a.h/2-10,a.w,3);
+    ctx.fillStyle=C.green;ctx.fillRect(a.x-a.w/2,a.y-a.h/2-10,bw,3);
+  }
+  if(player.invincible<=0||Math.floor(player.invincible*10)%2===0){drawTank(player.x,player.y,player.angle,player.w,player.h,player.color,true,skins[selectedSkin]);}
+  // 无敌护盾光圈
+  if(player.invincible>0){
+    ctx.save();
+    const r=player.w*0.9+Math.sin(gameTime*12)*4;
+    ctx.strokeStyle=skills.newEnemyShield?C.cyan:C.yellow;
+    ctx.shadowColor=skills.newEnemyShield?C.cyan:C.yellow;
+    ctx.shadowBlur=20;ctx.lineWidth=3;
+    ctx.globalAlpha=0.6+Math.sin(gameTime*10)*0.3;
+    ctx.beginPath();ctx.arc(player.x,player.y,r,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+  }
   for(const p of particles){ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=5;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);ctx.restore();}
-  if(state==='playing'||state==='paused')drawHUD();
+  if(state==='playing'||state==='paused'){drawHUD();drawSkillCards();}
+  if(bossBanner>0&&state==='playing'){
+    const morphBoss=enemies.find(e=>e.type==='boss'&&e.morphInvincible>0);
+    ctx.save();ctx.textAlign='center';
+    if(morphBoss){
+      ctx.font='bold 52px sans-serif';ctx.fillStyle=C.yellow;ctx.shadowColor=C.yellow;ctx.shadowBlur=30;
+      ctx.fillText('⚡ MORPHING ⚡',W/2,H/2-20);
+      ctx.font='bold 28px sans-serif';ctx.fillStyle=C.yellow;ctx.fillText('BOSS 无敌中，稍候再攻！',W/2,H/2+30);
+    }else{
+      ctx.font='bold 52px sans-serif';ctx.fillStyle=C.yellow;ctx.shadowColor=C.red;ctx.shadowBlur=30;
+      ctx.fillText('⚠ WARNING ⚠',W/2,H/2-20);
+      ctx.font='bold 30px sans-serif';ctx.fillStyle=C.red;ctx.fillText('BOSS PHASE 2',W/2,H/2+35);
+    }
+    ctx.restore();
+  }
   if(state==='paused')drawPause();
   if(state==='gameover')drawGameOver();
   if((state==='playing'||state==='paused')&&isTouch)drawTouchControls();
